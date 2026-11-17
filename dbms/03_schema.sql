@@ -29,7 +29,7 @@ END $$;
 
 -- 2. Table: users
 CREATE TABLE IF NOT EXISTS users (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(100) NOT NULL,
     email VARCHAR(150) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 -- 3. Table: locations
 CREATE TABLE IF NOT EXISTS locations (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(100) NOT NULL,
     building VARCHAR(100) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS locations (
 
 -- 4. Table: queues
 CREATE TABLE IF NOT EXISTS queues (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     location_id UUID NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
     status queue_status_enum NOT NULL DEFAULT 'OPEN',
@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS staff_assignments (
 
 -- 6. Table: queue_entries
 CREATE TABLE IF NOT EXISTS queue_entries (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     queue_id UUID NOT NULL REFERENCES queues(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     ticket_no INTEGER NOT NULL CHECK (ticket_no >= 1),
@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS queue_entries (
 
 -- 7. Table: queue_stats_hourly
 CREATE TABLE IF NOT EXISTS queue_stats_hourly (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     queue_id UUID NOT NULL REFERENCES queues(id) ON DELETE CASCADE,
     hour TIMESTAMP WITH TIME ZONE NOT NULL,
     joins INTEGER NOT NULL DEFAULT 0 CHECK (joins >= 0),
