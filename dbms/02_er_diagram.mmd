@@ -1,0 +1,77 @@
+erDiagram
+    HOSTEL ||--o{ STUDENT : accommodates
+    STUDENT ||--o{ FOOD_ORDER : places
+    STUDENT ||--o{ LAUNDRY_REQUEST : submits
+    STUDENT ||--o{ NOTIFICATION : receives
+
+    SERVICE_POINT ||--o{ MENU_ITEM : offers
+    SERVICE_POINT ||--o{ FOOD_ORDER : receives
+    SERVICE_POINT ||--o{ LAUNDRY_REQUEST : handles
+
+    FOOD_ORDER ||--|{ ORDER_ITEM : contains
+    MENU_ITEM ||--o{ ORDER_ITEM : included_in
+
+    FOOD_ORDER ||--o{ STATUS_HISTORY : has
+    LAUNDRY_REQUEST ||--o{ STATUS_HISTORY : has
+
+    HOSTEL {
+        int hostel_id PK
+        string hostel_name
+    }
+
+    STUDENT {
+        int student_id PK
+        string student_name
+        string email
+        int hostel_id FK
+    }
+
+    SERVICE_POINT {
+        int service_point_id PK
+        string service_name
+        string service_type
+        string location
+    }
+
+    MENU_ITEM {
+        int item_id PK
+        int service_point_id FK
+        string item_name
+        decimal item_price
+    }
+
+    FOOD_ORDER {
+        int order_id PK
+        int student_id FK
+        int service_point_id FK
+        int token_number
+        string order_status
+    }
+
+    ORDER_ITEM {
+        int order_id PK, FK
+        int item_id PK, FK
+        int quantity
+    }
+
+    LAUNDRY_REQUEST {
+        int laundry_id PK
+        int student_id FK
+        int service_point_id FK
+        string laundry_status
+    }
+
+    STATUS_HISTORY {
+        int history_id PK
+        int order_id FK
+        int laundry_id FK
+        string status
+        datetime updated_at
+    }
+
+    NOTIFICATION {
+        int notification_id PK
+        int student_id FK
+        string message
+        boolean is_read
+    }
