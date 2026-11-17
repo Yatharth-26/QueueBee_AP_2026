@@ -74,7 +74,8 @@ CREATE TABLE IF NOT EXISTS queue_entries (
     joined_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     called_at TIMESTAMP WITH TIME ZONE,
     served_at TIMESTAMP WITH TIME ZONE,
-    served_by UUID REFERENCES users(id) ON DELETE SET NULL
+    served_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT uq_queue_ticket UNIQUE (queue_id, ticket_no)
 );
 
 -- 7. Table: queue_stats_hourly
