@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Student Registration — QueueBee Smart Queue</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div id="navbar-container"></div>
+
+  <main class="auth-wrapper">
+    <div class="auth-card">
+      <div style="text-align: center; margin-bottom: 1.25rem;">
+        <span style="font-size: 2.5rem;">🎓</span>
+        <h1 class="auth-title">Join QueueBee</h1>
+        <p class="auth-subtitle">Register your student account to join campus queues</p>
+      </div>
+
+      <div id="error-alert" style="display: none; background: #fee2e2; color: #991b1b; padding: 0.75rem; border-radius: var(--radius-md); font-size: 0.85rem; margin-bottom: 1.25rem;"></div>
+
+      <form id="register-form">
+        <div class="form-group">
+          <label class="form-label" for="name">Full Name</label>
+          <input type="text" id="name" class="form-control" placeholder="e.g. Yatharth Soni" required minlength="2">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="email">Campus Email</label>
+          <input type="email" id="email" class="form-control" placeholder="e.g. 2501010531@campus.edu" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="password">Password</label>
+          <input type="password" id="password" class="form-control" placeholder="At least 6 characters" required minlength="6">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="confirm-password">Confirm Password</label>
+          <input type="password" id="confirm-password" class="form-control" placeholder="Re-enter password" required minlength="6">
+        </div>
+
+        <p class="form-hint" style="margin-bottom: 1.25rem;">
+          ℹ️ Note: All registrations automatically receive the <strong>STUDENT</strong> role. Staff/Admin roles are managed by campus supervisors.
+        </p>
+
+        <button type="submit" id="submit-btn" class="btn btn-primary btn-block btn-lg">
+          Create Student Account
+        </button>
+      </form>
+
+      <div style="text-align: center; margin-top: 1.25rem; font-size: 0.9rem; color: var(--text-muted);">
+        Already have an account? <a href="/login.html" style="color: var(--primary); font-weight: 600; text-decoration: none;">Sign in here</a>
+      </div>
+    </div>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script>
+    renderNavbar('register');
+
+    document.getElementById('register-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('name').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const confirmPassword = document.getElementById('confirm-password').value;
+      const submitBtn = document.getElementById('submit-btn');
+      const errorAlert = document.getElementById('error-alert');
+
+      errorAlert.style.display = 'none';
+
+      if (password !== confirmPassword) {
+        errorAlert.innerText = 'Passwords do not match. Please re-enter.';
+        errorAlert.style.display = 'block';
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.innerText = 'Creating account...';
+
+      try {
+        const res = await apiFetch('/auth/register', {
+          method: 'POST',
+          body: JSON.stringify({ name, email, password }),
+        });
+
+        saveAuth(res.data.user, res.data.token);
+        showToast('Registration successful! Redirecting...', 'success');
+
+        setTimeout(() => {
+          window.location.href = '/student.html';
+        }, 400);
+      } catch (err) {
+        errorAlert.innerText = err.message || 'Registration failed.';
+        errorAlert.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.innerText = 'Create Student Account';
+      }
+    });
+  </script>
+</body>
+</html>

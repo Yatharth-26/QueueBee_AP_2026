@@ -1,0 +1,26 @@
+-- Query: SELECT id, ticket_no, user_id, joined_at FROM queue_entries WHERE status = 'WAITING' ORDER BY ticket_no ASC LIMIT 1;
+-- Indexed Scan (B-Tree Composite Index on queue_id, status, joined_at & partial unique)
+-- Total Records: 10,524
+
+Limit  (cost=43.65..43.65 rows=1 width=44) (actual time=0.124..0.124 rows=1.00 loops=1)
+  Buffers: shared hit=50
+  ->  Sort  (cost=43.65..43.69 rows=18 width=44) (actual time=0.123..0.123 rows=1.00 loops=1)
+        Sort Key: ticket_no
+        Sort Method: top-N heapsort  Memory: 25kB
+        Buffers: shared hit=50
+        ->  Bitmap Heap Scan on queue_entries  (cost=39.54..43.56 rows=18 width=44) (actual time=0.094..0.104 rows=18.00 loops=1)
+              Recheck Cond: ((status = ANY ('{WAITING,CALLED}'::entry_status_enum[])) AND (status = 'WAITING'::entry_status_enum))
+              Heap Blocks: exact=2
+              Buffers: shared hit=47
+              ->  BitmapAnd  (cost=39.54..39.54 rows=1 width=0) (actual time=0.084..0.084 rows=0.00 loops=1)
+                    Buffers: shared hit=45
+                    ->  Bitmap Index Scan on unique_active_student_queue  (cost=0.00..8.26 rows=24 width=0) (actual time=0.005..0.005 rows=24.00 loops=1)
+                          Index Searches: 1
+                          Buffers: shared hit=1
+                    ->  Bitmap Index Scan on queue_entries_queue_id_status_joined_at_idx  (cost=0.00..31.03 rows=18 width=0) (actual time=0.078..0.078 rows=18.00 loops=1)
+                          Index Cond: (status = 'WAITING'::entry_status_enum)
+                          Index Searches: 10
+                          Buffers: shared hit=44
+Planning Time: 0.790 ms
+Execution Time: 0.148 ms
+-- Speedup: 8.6x faster with composite index!

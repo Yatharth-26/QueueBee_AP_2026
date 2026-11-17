@@ -1,0 +1,16 @@
+-- Query: SELECT id, ticket_no, user_id, joined_at FROM queue_entries WHERE status = 'WAITING' ORDER BY ticket_no ASC LIMIT 1;
+-- Index Scan Disabled (Sequential Table Scan)
+-- Total Records: 10,524
+
+Limit  (cost=583.64..583.64 rows=1 width=44) (actual time=1.255..1.256 rows=1.00 loops=1)
+  Buffers: shared hit=455
+  ->  Sort  (cost=583.64..583.68 rows=18 width=44) (actual time=1.254..1.254 rows=1.00 loops=1)
+        Sort Key: ticket_no
+        Sort Method: top-N heapsort  Memory: 25kB
+        Buffers: shared hit=455
+        ->  Seq Scan on queue_entries  (cost=0.00..583.55 rows=18 width=44) (actual time=0.353..1.238 rows=18.00 loops=1)
+              Filter: (status = 'WAITING'::entry_status_enum)
+              Rows Removed by Filter: 10506
+              Buffers: shared hit=452
+Planning Time: 0.874 ms
+Execution Time: 1.273 ms

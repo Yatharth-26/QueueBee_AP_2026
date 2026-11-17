@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard & Analytics — QueueBee</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .bar-chart {
+      display: flex;
+      align-items: flex-end;
+      gap: 6px;
+      height: 180px;
+      padding: 1rem 0;
+      border-bottom: 2px solid var(--border);
+    }
+    .bar-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      height: 100%;
+      justify-content: flex-end;
+    }
+    .bar {
+      width: 100%;
+      background: #2563eb;
+      border-radius: 4px 4px 0 0;
+      min-height: 4px;
+      transition: height 0.3s ease;
+      position: relative;
+    }
+    .bar:hover {
+      background: #1d4ed8;
+    }
+    .bar-label {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="navbar-container"></div>
+
+  <main class="main-content">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Campus Operations & Analytics</h1>
+        <p class="page-subtitle">Centralized queue oversight, performance metrics, and counter assignments.</p>
+      </div>
+
+      <div style="display: flex; gap: 0.5rem;">
+        <button onclick="openModal('location-modal')" class="btn btn-secondary btn-sm">
+          + Add Location
+        </button>
+        <button onclick="openModal('queue-modal')" class="btn btn-primary btn-sm">
+          + Create Queue
+        </button>
+        <button onclick="openModal('assignment-modal')" class="btn btn-secondary btn-sm">
+          🔗 Assign Staff
+        </button>
+      </div>
+    </div>
+
+    <!-- Top KPI Summary Cards -->
+    <div class="grid-4" style="margin-bottom: 2rem;">
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-label">Total Queue Joins</span>
+          <span class="stat-icon">👥</span>
+        </div>
+        <div id="stat-total-joins" class="stat-value">--</div>
+        <div class="stat-subtext">All-time student queue requests</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-label">Students Served</span>
+          <span class="stat-icon">✅</span>
+        </div>
+        <div id="stat-total-served" class="stat-value" style="color: #059669;">--</div>
+        <div class="stat-subtext" id="stat-served-rate">Completed counter sessions</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-label">Avg Waiting Time</span>
+          <span class="stat-icon">⏳</span>
+        </div>
+        <div id="stat-avg-wait" class="stat-value">--</div>
+        <div class="stat-subtext">From join to counter call</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-label">Median Service Duration</span>
+          <span class="stat-icon">⏱️</span>
+        </div>
+        <div id="stat-median-service" class="stat-value" style="color: #2563eb;">--</div>
+        <div class="stat-subtext">Outlier-resistant benchmark</div>
+      </div>
+    </div>
+
+    <!-- Analytics Chart: Hourly Distribution (Peak Usage) -->
+    <div class="card" style="margin-bottom: 2rem;">
+      <div class="card-header">
+        <div>
+          <h3 class="card-title">📊 Peak Usage Hours (Hourly Distribution)</h3>
+          <p style="font-size: 0.8rem; color: var(--text-muted);">
+            Hourly student arrival patterns derived from PostgreSQL 10,000+ historical records.
+          </p>
+        </div>
+        <span class="badge badge-waiting">Operational Hours (8 AM - 6 PM)</span>
+      </div>
+
+      <div id="hourly-chart" class="bar-chart">
+        <div style="text-align: center; width: 100%; color: var(--text-muted); align-self: center;">
+          Loading hourly distribution...
+        </div>
+      </div>
+    </div>
+
+    <!-- Queues Breakdown Table -->
+    <div class="card" style="margin-bottom: 2rem;">
+      <div class="card-header">
+        <h3 class="card-title">🏢 Campus Service Counters Performance</h3>
+        <span id="queue-count-badge" class="badge badge-open">0 Active Counters</span>
+      </div>
+
+      <div class="table-container">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Counter Name</th>
+              <th>Location</th>
+              <th>Status</th>
+              <th>Waiting</th>
+              <th>Capacity</th>
+              <th>Total Joins</th>
+              <th>Served</th>
+              <th>Median Service</th>
+            </tr>
+          </thead>
+          <tbody id="queues-table-body">
+            <tr><td colspan="8" style="text-align: center; padding: 2rem;">Loading counters...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Campus Locations Grid -->
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">📍 Campus Locations</h3>
+      </div>
+      <div id="locations-list" class="grid-3">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+  </main>
+
+  <!-- Modal: Create Location -->
+  <div id="location-modal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Add Campus Location</h3>
+        <button onclick="closeModal('location-modal')" class="modal-close">&times;</button>
+      </div>
+      <form id="create-location-form">
+        <div class="form-group">
+          <label class="form-label">Location Name</label>
+          <input type="text" id="loc-name" class="form-control" placeholder="e.g. Student Health Center" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Building / Facility</label>
+          <input type="text" id="loc-building" class="form-control" placeholder="e.g. Medical Block, Ground Floor" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Save Location</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Create Queue -->
+  <div id="queue-modal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Create Service Counter Queue</h3>
+        <button onclick="closeModal('queue-modal')" class="modal-close">&times;</button>
+      </div>
+      <form id="create-queue-form">
+        <div class="form-group">
+          <label class="form-label">Location</label>
+          <select id="queue-loc-select" class="form-control" required></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Queue Name</label>
+          <input type="text" id="new-queue-name" class="form-control" placeholder="e.g. Scholarship Verification" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Max Capacity</label>
+          <input type="number" id="new-queue-max" class="form-control" value="50" min="5" max="200" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Estimated Service Duration (Seconds)</label>
+          <input type="number" id="new-queue-avg" class="form-control" value="240" min="30" step="30" required>
+          <span class="form-hint">Initial estimate (system automatically updates to actual median service duration).</span>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Create Queue</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Assign Staff -->
+  <div id="assignment-modal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Assign Staff to Counter</h3>
+        <button onclick="closeModal('assignment-modal')" class="modal-close">&times;</button>
+      </div>
+      <form id="assign-staff-form">
+        <div class="form-group">
+          <label class="form-label">Staff Member</label>
+          <select id="assign-user-select" class="form-control" required></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Target Queue</label>
+          <select id="assign-queue-select" class="form-control" required></select>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Save Staff Assignment</button>
+      </form>
+    </div>
+  </div>
+
+  <footer class="footer">
+    Smart Queue (QueueBee) · Administrator Management Portal
+  </footer>
+
+  <script src="/js/api.js"></script>
+  <script>
+    renderNavbar('admin');
+
+    const currentUser = getUser();
+    if (!currentUser || currentUser.role !== 'ADMIN') {
+      showToast('Access denied. Administrator privileges required.', 'error');
+      setTimeout(() => window.location.href = '/login.html', 1000);
+    } else {
+      initDashboard();
+    }
+
+    async function initDashboard() {
+      await Promise.all([
+        loadOverview(),
+        loadQueueAnalytics(),
+        loadHourlyStats(),
+        loadLocations(),
+        loadStaffList(),
+      ]);
+    }
+
+    async function loadOverview() {
+      try {
+        const res = await apiFetch('/admin/analytics/overview');
+        const d = res.data;
+        document.getElementById('stat-total-joins').innerText = d.totalJoins.toLocaleString();
+        document.getElementById('stat-total-served').innerText = d.totalServed.toLocaleString();
+        document.getElementById('stat-served-rate').innerText = `No-show rate: ${d.noShowRate}`;
+        document.getElementById('stat-avg-wait').innerText = `${d.avgWaitMinutes} mins`;
+        document.getElementById('stat-median-service').innerText = `${d.medianServiceMinutes} mins`;
+      } catch (err) {
+        showToast('Error loading overview: ' + err.message, 'error');
+      }
+    }
+
+    async function loadHourlyStats() {
+      try {
+        const res = await apiFetch('/admin/analytics/hourly');
+        const hours = res.data;
+        const chartEl = document.getElementById('hourly-chart');
+
+        if (hours.length === 0) {
+          chartEl.innerHTML = '<div style="text-align: center; width: 100%;">No hourly data available</div>';
+          return;
+        }
+
+        // Filter operational hours (8 AM to 18 PM)
+        const opHours = hours.filter(h => h.hour >= 8 && h.hour <= 18);
+        const maxJoins = Math.max(...opHours.map(h => h.joins), 1);
+
+        chartEl.innerHTML = opHours.map(h => {
+          const heightPct = Math.round((h.joins / maxJoins) * 100);
+          return `
+            <div class="bar-col" title="${h.hourLabel}: ${h.joins} joins, ${h.served} served">
+              <span style="font-size: 0.65rem; color: #1e40af; font-weight: 700; margin-bottom: 2px;">${h.joins}</span>
+              <div class="bar" style="height: ${heightPct}%;"></div>
+              <span class="bar-label">${h.hour}:00</span>
+            </div>
+          `;
+        }).join('');
+      } catch (err) {
+        console.error('Hourly load error:', err);
+      }
+    }
+
+    async function loadQueueAnalytics() {
+      try {
+        const res = await apiFetch('/admin/analytics/queues');
+        const queues = res.data;
+        document.getElementById('queue-count-badge').innerText = `${queues.length} Active Counters`;
+
+        const tbody = document.getElementById('queues-table-body');
+        const queueSelectModal = document.getElementById('assign-queue-select');
+
+        queueSelectModal.innerHTML = queues.map(q => `<option value="${q.queueId}">${q.name} (${q.locationName})</option>`).join('');
+
+        tbody.innerHTML = queues.map(q => {
+          const statusClass = q.status === 'OPEN' ? 'badge-open' : (q.status === 'PAUSED' ? 'badge-paused' : 'badge-closed');
+          return `
+            <tr>
+              <td><strong>${q.name}</strong></td>
+              <td>${q.locationName}</td>
+              <td><span class="badge ${statusClass}">● ${q.status}</span></td>
+              <td><strong style="color: #2563eb;">${q.waiting}</strong></td>
+              <td>${q.maxSize} (${q.utilizationRate})</td>
+              <td>${q.joins.toLocaleString()}</td>
+              <td style="color: #059669;">${q.served.toLocaleString()}</td>
+              <td>~${Math.round(q.medianServiceSeconds / 60)} mins</td>
+            </tr>
+          `;
+        }).join('');
+      } catch (err) {
+        showToast('Error loading queue stats: ' + err.message, 'error');
+      }
+    }
+
+    async function loadLocations() {
+      try {
+        const res = await apiFetch('/locations');
+        const locs = res.data;
+        const container = document.getElementById('locations-list');
+        const locSelect = document.getElementById('queue-loc-select');
+
+        locSelect.innerHTML = locs.map(l => `<option value="${l.id}">${l.name} (${l.building})</option>`).join('');
+
+        container.innerHTML = locs.map(l => `
+          <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem;">
+            <h4 style="font-weight: 700; color: var(--secondary); margin-bottom: 0.25rem;">${l.name}</h4>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem;">🏢 ${l.building}</p>
+            <span class="badge badge-waiting">${l.queues?.length || 0} Queues</span>
+          </div>
+        `).join('');
+      } catch (err) {
+        console.error('Locations error:', err);
+      }
+    }
+
+    async function loadStaffList() {
+      try {
+        const res = await apiFetch('/admin/users?role=STAFF');
+        const staff = res.data;
+        const select = document.getElementById('assign-user-select');
+        select.innerHTML = staff.map(s => `<option value="${s.id}">👔 ${s.name} (${s.email})</option>`).join('');
+      } catch (err) {
+        console.error('Staff error:', err);
+      }
+    }
+
+    // Modal controls
+    function openModal(id) {
+      document.getElementById(id).classList.add('active');
+    }
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('active');
+    }
+
+    // Modal Form Submissions
+    document.getElementById('create-location-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('loc-name').value.trim();
+      const building = document.getElementById('loc-building').value.trim();
+      try {
+        await apiFetch('/locations', {
+          method: 'POST',
+          body: JSON.stringify({ name, building }),
+        });
+        showToast('Location added successfully!', 'success');
+        closeModal('location-modal');
+        loadLocations();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+
+    document.getElementById('create-queue-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const locationId = document.getElementById('queue-loc-select').value;
+      const name = document.getElementById('new-queue-name').value.trim();
+      const maxSize = parseInt(document.getElementById('new-queue-max').value, 10);
+      const avgServiceSeconds = parseInt(document.getElementById('new-queue-avg').value, 10);
+      try {
+        await apiFetch('/queues', {
+          method: 'POST',
+          body: JSON.stringify({ locationId, name, maxSize, avgServiceSeconds }),
+        });
+        showToast('Queue created successfully!', 'success');
+        closeModal('queue-modal');
+        loadQueueAnalytics();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+
+    document.getElementById('assign-staff-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const userId = document.getElementById('assign-user-select').value;
+      const queueId = document.getElementById('assign-queue-select').value;
+      try {
+        await apiFetch('/admin/assignments', {
+          method: 'POST',
+          body: JSON.stringify({ userId, queueId }),
+        });
+        showToast('Staff assigned to counter successfully!', 'success');
+        closeModal('assignment-modal');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+  </script>
+</body>
+</html>

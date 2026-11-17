@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In — QueueBee Smart Queue</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div id="navbar-container"></div>
+
+  <main class="auth-wrapper">
+    <div class="auth-card">
+      <div style="text-align: center; margin-bottom: 1.25rem;">
+        <span style="font-size: 2.5rem;">🐝</span>
+        <h1 class="auth-title">Welcome to QueueBee</h1>
+        <p class="auth-subtitle">Sign in to your campus account</p>
+      </div>
+
+      <div id="error-alert" style="display: none; background: #fee2e2; color: #991b1b; padding: 0.75rem; border-radius: var(--radius-md); font-size: 0.85rem; margin-bottom: 1.25rem;"></div>
+
+      <form id="login-form">
+        <div class="form-group">
+          <label class="form-label" for="email">Campus Email</label>
+          <input type="email" id="email" class="form-control" placeholder="e.g. yatharth@student.campus" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="password">Password</label>
+          <input type="password" id="password" class="form-control" placeholder="••••••••" required>
+        </div>
+
+        <button type="submit" id="submit-btn" class="btn btn-primary btn-block btn-lg" style="margin-top: 0.5rem;">
+          Sign In
+        </button>
+      </form>
+
+      <div style="text-align: center; margin-top: 1.25rem; font-size: 0.9rem; color: var(--text-muted);">
+        New student? <a href="/register.html" style="color: var(--primary); font-weight: 600; text-decoration: none;">Create an account</a>
+      </div>
+
+      <!-- Quick 1-Click Demo Login Fillers for Evaluators -->
+      <div class="demo-credentials-box">
+        <strong>⚡ 1-Click Demo Logins for Evaluator Viva:</strong>
+        <div class="demo-btn-group">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="quickFill('admin@smartqueue.campus', 'adminPassword123')">
+            👑 Admin
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="quickFill('staff.canteen@smartqueue.campus', 'password123')">
+            👔 Staff (Canteen)
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="quickFill('yatharth@student.campus', 'password123')">
+            🎓 Student (Lead)
+          </button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script>
+    renderNavbar('login');
+
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('registered') === '1') {
+      showToast('Account created! Please sign in.', 'success');
+    }
+    if (urlParams.get('expired') === '1') {
+      showToast('Session expired. Please sign in again.', 'info');
+    }
+
+    function quickFill(email, password) {
+      document.getElementById('email').value = email;
+      document.getElementById('password').value = password;
+      document.getElementById('login-form').dispatchEvent(new Event('submit'));
+    }
+
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const submitBtn = document.getElementById('submit-btn');
+      const errorAlert = document.getElementById('error-alert');
+
+      errorAlert.style.display = 'none';
+      submitBtn.disabled = true;
+      submitBtn.innerText = 'Signing in...';
+
+      try {
+        const res = await apiFetch('/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ email, password }),
+        });
+
+        saveAuth(res.data.user, res.data.token);
+        showToast('Signed in successfully!', 'success');
+
+        // Redirect based on role
+        setTimeout(() => {
+          if (res.data.user.role === 'ADMIN') {
+            window.location.href = '/admin.html';
+          } else if (res.data.user.role === 'STAFF') {
+            window.location.href = '/staff.html';
+          } else {
+            window.location.href = '/student.html';
+          }
+        }, 300);
+      } catch (err) {
+        errorAlert.innerText = err.message || 'Login failed. Please verify your credentials.';
+        errorAlert.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.innerText = 'Sign In';
+      }
+    });
+  </script>
+</body>
+</html>

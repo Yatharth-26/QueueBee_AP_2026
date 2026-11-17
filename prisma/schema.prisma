@@ -1,0 +1,144 @@
+// Prisma Schema for Smart Queue (QueueBee)
+// Course: Advanced Programming (AP) · B.Tech 2nd Year
+// Group Lead: Yatharth Soni (2501010531) · Team T0083
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  STAFF
+  ADMIN
+
+  @@map("role_enum")
+}
+
+enum QueueStatus {
+  OPEN
+  PAUSED
+  CLOSED
+
+  @@map("queue_status_enum")
+}
+
+enum EntryStatus {
+  WAITING
+  CALLED
+  SERVED
+  NO_SHOW
+  CANCELLED
+
+  @@map("entry_status_enum")
+}
+
+// Table 1: users
+model User {
+  id           String   @id @default(uuid()) @map("id") @db.Uuid
+  name         String   @map("name") @db.VarChar(100)
+  email        String   @unique @map("email") @db.VarChar(150)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  role         Role     @default(STUDENT) @map("role")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Relationships
+  assignments    StaffAssignment[]
+  queueEntries   QueueEntry[]      @relation("StudentEntries")
+  servedEntries  QueueEntry[]      @relation("StaffServedEntries")
+
+  @@map("users")
+}
+
+// Table 2: locations
+model Location {
+  id        String   @id @default(uuid()) @map("id") @db.Uuid
+  name      String   @map("name") @db.VarChar(100)
+  building  String   @map("building") @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relationships
+  queues Queue[]
+
+  @@map("locations")
+}
+
+// Table 3: queues
+model Queue {
+  id                String      @id @default(uuid()) @map("id") @db.Uuid
+  locationId        String      @map("location_id") @db.Uuid
+  name              String      @map("name") @db.VarChar(100)
+  status            QueueStatus @default(OPEN) @map("status")
+  maxSize           Int         @default(100) @map("max_size")
+  nextTicketNo      Int         @default(1) @map("next_ticket_no")
+  avgServiceSeconds Int         @default(300) @map("avg_service_seconds") // Stores median service duration in seconds
+  createdAt         DateTime    @default(now()) @map("created_at")
+
+  // Relationships
+  location         Location          @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  staffAssignments StaffAssignment[]
+  entries          QueueEntry[]
+  hourlyStats      QueueStatsHourly[]
+
+  @@index([locationId])
+  @@index([status])
+  @@map("queues")
+}
+
+// Table 4: staff_assignments
+model StaffAssignment {
+  userId  String @map("user_id") @db.Uuid
+  queueId String @map("queue_id") @db.Uuid
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  queue Queue @relation(fields: [queueId], references: [id], onDelete: Cascade)
+
+  @@id([userId, queueId])
+  @@map("staff_assignments")
+}
+
+// Table 5: queue_entries
+model QueueEntry {
+  id        String      @id @default(uuid()) @map("id") @db.Uuid
+  queueId   String      @map("queue_id") @db.Uuid
+  userId    String      @map("user_id") @db.Uuid
+  ticketNo  Int         @map("ticket_no")
+  status    EntryStatus @default(WAITING) @map("status")
+  joinedAt  DateTime    @default(now()) @map("joined_at")
+  calledAt  DateTime?   @map("called_at")
+  servedAt  DateTime?   @map("served_at")
+  servedBy  String?     @map("served_by") @db.Uuid
+
+  queue  Queue @relation(fields: [queueId], references: [id], onDelete: Cascade)
+  user   User  @relation("StudentEntries", fields: [userId], references: [id], onDelete: Cascade)
+  staff  User? @relation("StaffServedEntries", fields: [servedBy], references: [id], onDelete: SetNull)
+
+  // Indexes for query performance and concurrency locking
+  @@index([queueId, status, joinedAt])
+  @@index([userId, status])
+  @@index([joinedAt])
+  @@index([servedAt])
+  @@map("queue_entries")
+}
+
+// Table 6: queue_stats_hourly
+model QueueStatsHourly {
+  id             String   @id @default(uuid()) @map("id") @db.Uuid
+  queueId        String   @map("queue_id") @db.Uuid
+  hour           DateTime @map("hour")
+  joins          Int      @default(0) @map("joins")
+  served         Int      @default(0) @map("served")
+  noShows        Int      @default(0) @map("no_shows")
+  avgWaitSeconds Float    @default(0.0) @map("avg_wait_seconds")
+
+  queue Queue @relation(fields: [queueId], references: [id], onDelete: Cascade)
+
+  @@unique([queueId, hour])
+  @@index([queueId])
+  @@index([hour])
+  @@map("queue_stats_hourly")
+}
