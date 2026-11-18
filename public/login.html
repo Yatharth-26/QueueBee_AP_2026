@@ -1,117 +1,49 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sign In — QueueBee Smart Queue</title>
-  <link rel="stylesheet" href="/css/style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login - QueueBee</title>
+  <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body>
-  <div id="navbar-container"></div>
+  <header id="navbar"></header>
 
-  <main class="auth-wrapper">
-    <div class="auth-card">
-      <div style="text-align: center; margin-bottom: 1.25rem;">
-        <span style="font-size: 2.5rem;">🐝</span>
-        <h1 class="auth-title">Welcome to QueueBee</h1>
-        <p class="auth-subtitle">Sign in to your campus account</p>
-      </div>
+  <main class="container">
+    <div class="card form-card">
+      <h2>Welcome back 👋</h2>
+      <p class="muted">Log in to join a queue or manage one.</p>
 
-      <div id="error-alert" style="display: none; background: #fee2e2; color: #991b1b; padding: 0.75rem; border-radius: var(--radius-md); font-size: 0.85rem; margin-bottom: 1.25rem;"></div>
+      <div id="message" class="hidden"></div>
 
-      <form id="login-form">
-        <div class="form-group">
-          <label class="form-label" for="email">Campus Email</label>
-          <input type="email" id="email" class="form-control" placeholder="e.g. yatharth@student.campus" required>
+      <form id="login-form" novalidate>
+        <label for="email">Email</label>
+        <input type="email" id="email" placeholder="you@college.edu" />
+
+        <label for="password">Password</label>
+        <input type="password" id="password" placeholder="Your password" />
+
+        <div class="form-actions">
+          <button type="submit" class="btn">Login</button>
         </div>
-
-        <div class="form-group">
-          <label class="form-label" for="password">Password</label>
-          <input type="password" id="password" class="form-control" placeholder="••••••••" required>
-        </div>
-
-        <button type="submit" id="submit-btn" class="btn btn-primary btn-block btn-lg" style="margin-top: 0.5rem;">
-          Sign In
-        </button>
       </form>
 
-      <div style="text-align: center; margin-top: 1.25rem; font-size: 0.9rem; color: var(--text-muted);">
-        New student? <a href="/register.html" style="color: var(--primary); font-weight: 600; text-decoration: none;">Create an account</a>
-      </div>
+      <p class="muted" style="margin-top: 14px">
+        New student? <a href="/register.html">Create an account</a>
+      </p>
 
-      <!-- Quick 1-Click Demo Login Fillers for Evaluators -->
-      <div class="demo-credentials-box">
-        <strong>⚡ 1-Click Demo Logins for Evaluator Viva:</strong>
-        <div class="demo-btn-group">
-          <button type="button" class="btn btn-secondary btn-sm" onclick="quickFill('admin@smartqueue.campus', 'adminPassword123')">
-            👑 Admin
-          </button>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="quickFill('staff.canteen@smartqueue.campus', 'password123')">
-            👔 Staff (Canteen)
-          </button>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="quickFill('yatharth@student.campus', 'password123')">
-            🎓 Student (Lead)
-          </button>
+      <div class="demo-box">
+        <strong>Demo accounts</strong> <span class="muted">(password: password123)</span>
+        <div class="demo-buttons">
+          <button type="button" class="btn btn-light btn-small" data-email="student@queuebee.edu">Student</button>
+          <button type="button" class="btn btn-light btn-small" data-email="staff@queuebee.edu">Staff</button>
+          <button type="button" class="btn btn-light btn-small" data-email="admin@queuebee.edu">Admin</button>
         </div>
       </div>
     </div>
   </main>
 
   <script src="/js/api.js"></script>
-  <script>
-    renderNavbar('login');
-
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('registered') === '1') {
-      showToast('Account created! Please sign in.', 'success');
-    }
-    if (urlParams.get('expired') === '1') {
-      showToast('Session expired. Please sign in again.', 'info');
-    }
-
-    function quickFill(email, password) {
-      document.getElementById('email').value = email;
-      document.getElementById('password').value = password;
-      document.getElementById('login-form').dispatchEvent(new Event('submit'));
-    }
-
-    document.getElementById('login-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const email = document.getElementById('email').value.trim();
-      const password = document.getElementById('password').value;
-      const submitBtn = document.getElementById('submit-btn');
-      const errorAlert = document.getElementById('error-alert');
-
-      errorAlert.style.display = 'none';
-      submitBtn.disabled = true;
-      submitBtn.innerText = 'Signing in...';
-
-      try {
-        const res = await apiFetch('/auth/login', {
-          method: 'POST',
-          body: JSON.stringify({ email, password }),
-        });
-
-        saveAuth(res.data.user, res.data.token);
-        showToast('Signed in successfully!', 'success');
-
-        // Redirect based on role
-        setTimeout(() => {
-          if (res.data.user.role === 'ADMIN') {
-            window.location.href = '/admin.html';
-          } else if (res.data.user.role === 'STAFF') {
-            window.location.href = '/staff.html';
-          } else {
-            window.location.href = '/student.html';
-          }
-        }, 300);
-      } catch (err) {
-        errorAlert.innerText = err.message || 'Login failed. Please verify your credentials.';
-        errorAlert.style.display = 'block';
-        submitBtn.disabled = false;
-        submitBtn.innerText = 'Sign In';
-      }
-    });
-  </script>
+  <script src="/js/login.js"></script>
 </body>
 </html>

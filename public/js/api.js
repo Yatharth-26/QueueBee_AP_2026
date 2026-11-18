@@ -1,159 +1,145 @@
-// Central API Fetch Helper & Authentication Manager (Vanilla JS)
-// Course: Advanced Programming (AP) · B.Tech 2nd Year
-// Smart Queue (QueueBee)
+// Helper functions shared by every page (loaded before the page's own script).
 
-const API_BASE = '/api';
+const TOKEN_KEY = "queuebee_token";
+const USER_KEY = "queuebee_user";
 
-/**
- * Storage Helpers
- */
+// ---------- Login data is kept in the browser's localStorage ----------
+function saveLogin(token, user) {
+  localStorage.setItem(TOKEN_KEY, token);
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+}
+
 function getToken() {
-  return localStorage.getItem('queuebee_token');
+  return localStorage.getItem(TOKEN_KEY);
 }
 
 function getUser() {
-  const userStr = localStorage.getItem('queuebee_user');
-  try {
-    return userStr ? JSON.parse(userStr) : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveAuth(user, token) {
-  localStorage.setItem('queuebee_token', token);
-  localStorage.setItem('queuebee_user', JSON.stringify(user));
-}
-
-function clearAuth() {
-  localStorage.removeItem('queuebee_token');
-  localStorage.removeItem('queuebee_user');
-  localStorage.removeItem('queuebee_active_queue');
+  const text = localStorage.getItem(USER_KEY);
+  return text ? JSON.parse(text) : null;
 }
 
 function logout() {
-  clearAuth();
-  window.location.href = '/login.html';
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+  window.location.href = "/login.html";
 }
 
-/**
- * Robust Central API Request Wrapper
- */
-async function apiFetch(endpoint, options = {}) {
-  const token = getToken();
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(options.headers || {}),
-  };
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  const url = `${API_BASE}${endpoint.startsWith('/') ? endpoint : '/' + endpoint}`;
-
-  try {
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
-
-    const data = await response.json().catch(() => null);
-
-    if (response.status === 401) {
-      // If unauthorized on a protected page, log out and redirect
-      if (!window.location.pathname.includes('login.html') && !window.location.pathname.includes('register.html')) {
-        clearAuth();
-        window.location.href = '/login.html?expired=1';
-        return;
-      }
-    }
-
-    if (!response.ok) {
-      const errorMsg = data?.message || `HTTP ${response.status}: An error occurred`;
-      const err = new Error(errorMsg);
-      err.data = data;
-      err.status = response.status;
-      throw err;
-    }
-
-    return data;
-  } catch (error) {
-    console.error(`API Fetch Error [${endpoint}]:`, error);
-    throw error;
-  }
+// Which dashboard page belongs to which role
+function dashboardUrl(role) {
+  if (role === "ADMIN") return "/admin.html";
+  if (role === "STAFF") return "/staff.html";
+  return "/student.html";
 }
 
-/**
- * Floating Toast Notification
- */
-function showToast(message, type = 'info') {
-  let container = document.getElementById('toast-container');
-  if (!container) {
-    container = document.createElement('div');
-    container.id = 'toast-container';
-    document.body.appendChild(container);
-  }
-
-  const toast = document.createElement('div');
-  toast.className = `toast ${type}`;
-  toast.innerHTML = `
-    <span>${message}</span>
-  `;
-
-  container.appendChild(toast);
-
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateY(10px)';
-    toast.style.transition = 'all 0.3s ease';
-    setTimeout(() => toast.remove(), 300);
-  }, 4000);
-}
-
-/**
- * Render Dynamic Universal Navbar
- */
-function renderNavbar(activePage = '') {
-  const navPlaceholder = document.getElementById('navbar-container');
-  if (!navPlaceholder) return;
-
+// Call this at the top of a protected page. If the user is not logged in
+// (or has the wrong role) they are sent away. The server checks the role too -
+// this only makes the UI friendlier.
+function requireLogin(allowedRoles) {
   const user = getUser();
+  if (!user || !getToken()) {
+    window.location.href = "/login.html";
+    return null;
+  }
+  if (!allowedRoles.includes(user.role)) {
+    window.location.href = dashboardUrl(user.role);
+    return null;
+  }
+  return user;
+}
 
-  let actionsHtml = '';
+// ---------- Talking to the backend ----------
+// apiRequest("/queue/join", "POST", { locationId: 1 })  ->  returns the JSON answer
+async function apiRequest(path, method = "GET", body = null) {
+  const headers = { "Content-Type": "application/json" };
+
+  const token = getToken();
+  if (token) {
+    headers.Authorization = "Bearer " + token; // JWT goes in the Authorization header
+  }
+
+  const response = await fetch("/api" + path, {
+    method: method,
+    headers: headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  let data = {};
+  try {
+    data = await response.json();
+  } catch (error) {
+    // response had no JSON body
+  }
+
+  // 401 while we hold a token = token expired -> log in again
+  if (response.status === 401 && token && !window.location.pathname.includes("login")) {
+    logout();
+  }
+
+  if (!response.ok) {
+    throw new Error(data.message || "Something went wrong");
+  }
+  return data;
+}
+
+// ---------- Small UI helpers ----------
+
+// Shows a message in <div id="message">. type = "error" | "success" | "info"
+function showMessage(text, type = "error") {
+  const box = document.getElementById("message");
+  box.textContent = text;
+  box.className = "alert alert-" + type;
+}
+
+function hideMessage() {
+  const box = document.getElementById("message");
+  box.className = "hidden";
+}
+
+// Stops user-typed text (like a name) from being run as HTML. Use it whenever
+// we put data from the server into innerHTML.
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function formatDateTime(isoText) {
+  return new Date(isoText).toLocaleString([], {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function statusBadge(status) {
+  return `<span class="badge badge-${status}">${status}</span>`;
+}
+
+// Builds the top navigation bar inside <header id="navbar">
+function renderNavbar() {
+  const user = getUser();
+  let linksHtml = "";
+
   if (user) {
-    let dashboardLink = '/student.html';
-    if (user.role === 'STAFF') dashboardLink = '/staff.html';
-    if (user.role === 'ADMIN') dashboardLink = '/admin.html';
-
-    actionsHtml = `
-      <div class="user-badge">
-        <span>👤 ${user.name}</span>
-        <span class="role-tag ${user.role.toLowerCase()}">${user.role}</span>
-      </div>
-      <a href="${dashboardLink}" class="btn btn-secondary btn-sm">Dashboard</a>
-      <button onclick="logout()" class="btn btn-secondary btn-sm" title="Log out">Logout</button>
+    linksHtml = `
+      <a class="btn btn-light btn-small" href="${dashboardUrl(user.role)}">Dashboard</a>
+      ${user.role === "ADMIN" ? '<a class="btn btn-light btn-small" href="/staff.html">Staff Desk</a>' : ""}
+      <span class="nav-user">${escapeHtml(user.name)} (${user.role})</span>
+      <button class="btn btn-small" onclick="logout()">Logout</button>
     `;
   } else {
-    actionsHtml = `
-      <a href="/login.html" class="btn btn-secondary btn-sm">Log In</a>
-      <a href="/register.html" class="btn btn-primary btn-sm">Register</a>
+    linksHtml = `
+      <a class="btn btn-light btn-small" href="/login.html">Login</a>
+      <a class="btn btn-small" href="/register.html">Register</a>
     `;
   }
 
-  navPlaceholder.innerHTML = `
+  document.getElementById("navbar").innerHTML = `
     <nav class="navbar">
-      <div class="nav-container">
-        <a href="/index.html" class="brand">
-          <div class="brand-icon">🐝</div>
-          <div>
-            <span class="brand-text">QueueBee</span>
-            <span class="brand-badge">Smart Queue</span>
-          </div>
-        </a>
-        <div class="nav-actions">
-          ${actionsHtml}
-        </div>
+      <div class="nav-inner">
+        <a class="brand" href="/index.html"><span class="brand-icon">🐝</span> QueueBee</a>
+        <div class="nav-links">${linksHtml}</div>
       </div>
     </nav>
   `;

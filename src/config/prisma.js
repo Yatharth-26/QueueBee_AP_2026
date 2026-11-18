@@ -1,12 +1,8 @@
-// Prisma Client Singleton
-// Course: Advanced Programming (AP) · B.Tech 2nd Year
-// Smart Queue (QueueBee)
+// One shared Prisma Client for the whole app.
+// Prisma Client is our ORM: it lets us talk to PostgreSQL using JavaScript
+// objects instead of writing raw SQL.
+const { PrismaClient } = require("@prisma/client");
 
-const { PrismaClient } = require('@prisma/client');
-const env = require('./env');
-
-const prisma = new PrismaClient({
-  log: env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
-});
+const prisma = new PrismaClient();
 
 module.exports = prisma;

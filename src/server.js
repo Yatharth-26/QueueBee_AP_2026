@@ -1,51 +1,15 @@
-// HTTP Server Startup & Graceful Lifecycle Management
-// Course: Advanced Programming (AP) · B.Tech 2nd Year
-// Smart Queue (QueueBee)
+// Entry point: loads the .env file and starts the HTTP server.
+require("dotenv").config(); // must run first so process.env has our settings
 
-const app = require('./app');
-const env = require('./config/env');
-const prisma = require('./config/prisma');
-const { redis } = require('./config/redis');
+const app = require("./app");
 
-const PORT = env.PORT || 3000;
+if (!process.env.JWT_SECRET) {
+  console.error("JWT_SECRET is missing. Please create a .env file (see .env.example).");
+  process.exit(1);
+}
 
-const server = app.listen(PORT, () => {
-  console.log(`===================================================`);
-  console.log(`🚀 Smart Queue (QueueBee) Server Started!`);
-  console.log(`📍 URL: http://localhost:${PORT}`);
-  console.log(`🌍 Environment: ${env.NODE_ENV}`);
-  console.log(`📡 Health Check: http://localhost:${PORT}/api/health`);
-  console.log(`===================================================`);
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`QueueBee is running at http://localhost:${PORT}`);
 });
-
-// Graceful Shutdown Handler
-const gracefulShutdown = async (signal) => {
-  console.log(`\n🛑 Received ${signal}. Starting graceful shutdown...`);
-
-  server.close(async () => {
-    console.log('HTTP server closed.');
-
-    try {
-      await prisma.$disconnect();
-      console.log('PostgreSQL (Prisma) disconnected.');
-
-      if (redis) {
-        await redis.quit();
-        console.log('Redis client disconnected.');
-      }
-    } catch (err) {
-      console.error('Error during database teardown:', err);
-    }
-
-    process.exit(0);
-  });
-
-  // Force exit after 10 seconds if hanging
-  setTimeout(() => {
-    console.error('Forced shutdown due to timeout');
-    process.exit(1);
-  }, 10000);
-};
-
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));

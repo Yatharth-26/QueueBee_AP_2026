@@ -1,207 +1,49 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Student Queue Portal — QueueBee</title>
-  <link rel="stylesheet" href="/css/style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Queue - QueueBee</title>
+  <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body>
-  <div id="navbar-container"></div>
+  <header id="navbar"></header>
 
-  <main class="main-content">
-    <div class="page-header">
-      <div>
-        <h1 class="page-title">Campus Service Queues</h1>
-        <p class="page-subtitle">Select a service counter below and join the queue digitally.</p>
+  <main class="container">
+    <h1 id="welcome">Hello 👋</h1>
+    <p class="muted">This page refreshes every 5 seconds.</p>
+
+    <div id="message" class="hidden"></div>
+
+    <!-- Current ticket (filled by student.js) -->
+    <section id="ticket-section"></section>
+
+    <!-- Available services -->
+    <h2 class="section-title">Join a queue</h2>
+    <div id="locations" class="grid"></div>
+
+    <!-- Old tickets -->
+    <h2 class="section-title">My ticket history</h2>
+    <div class="card">
+      <div style="max-width: 220px; margin-bottom: 12px">
+        <select id="history-filter">
+          <option value="">All statuses</option>
+          <option value="COMPLETED">Completed</option>
+          <option value="CANCELLED">Cancelled</option>
+          <option value="WAITING">Waiting</option>
+          <option value="CALLED">Called</option>
+        </select>
       </div>
-
-      <div id="active-ticket-banner" style="display: none;">
-        <a id="active-ticket-link" href="#" class="btn btn-warning">
-          🎫 View My Active Ticket
-        </a>
-      </div>
-    </div>
-
-    <!-- Location Filter Tabs -->
-    <div id="location-tabs" style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; overflow-x: auto; padding-bottom: 0.5rem;">
-      <button class="btn btn-primary btn-sm active" onclick="filterLocation('ALL')">All Locations</button>
-    </div>
-
-    <!-- Queues Grid -->
-    <div id="queues-container" class="grid-3">
-      <div style="grid-column: 1/-1; text-align: center; padding: 3rem; color: var(--text-muted);">
-        Loading service queues...
+      <div id="history"></div>
+      <div class="pagination">
+        <button class="btn btn-light btn-small" id="prev-page">Previous</button>
+        <span id="page-info" class="muted"></span>
+        <button class="btn btn-light btn-small" id="next-page">Next</button>
       </div>
     </div>
   </main>
 
-  <footer class="footer">
-    Smart Queue (QueueBee) · Student Self-Service Counter Portal
-  </footer>
-
   <script src="/js/api.js"></script>
-  <script>
-    renderNavbar('student');
-
-    let allQueues = [];
-    let selectedLocation = 'ALL';
-
-    async function loadQueues() {
-      try {
-        const res = await apiFetch('/queues');
-        allQueues = res.data;
-        renderLocationTabs();
-        renderQueues();
-        checkActiveTicket();
-      } catch (err) {
-        showToast('Failed to load queues: ' + err.message, 'error');
-      }
-    }
-
-    function renderLocationTabs() {
-      const container = document.getElementById('location-tabs');
-      const locations = new Map();
-      allQueues.forEach(q => {
-        if (q.location) {
-          locations.set(q.location.id, q.location.name);
-        }
-      });
-
-      let tabsHtml = `<button class="btn ${selectedLocation === 'ALL' ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="filterLocation('ALL')">All Locations (${allQueues.length})</button>`;
-
-      locations.forEach((name, id) => {
-        const isSelected = selectedLocation === id;
-        tabsHtml += `<button class="btn ${isSelected ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="filterLocation('${id}')">${name}</button>`;
-      });
-
-      container.innerHTML = tabsHtml;
-    }
-
-    function filterLocation(locId) {
-      selectedLocation = locId;
-      renderLocationTabs();
-      renderQueues();
-    }
-
-    function renderQueues() {
-      const container = document.getElementById('queues-container');
-      const filtered = selectedLocation === 'ALL'
-        ? allQueues
-        : allQueues.filter(q => q.locationId === selectedLocation);
-
-      if (filtered.length === 0) {
-        container.innerHTML = `
-          <div style="grid-column: 1/-1; text-align: center; padding: 3rem; background: white; border-radius: var(--radius-lg); border: 1px dashed var(--border);">
-            <p style="color: var(--text-muted);">No queues currently open under this location.</p>
-          </div>
-        `;
-        return;
-      }
-
-      container.innerHTML = filtered.map(q => {
-        const isOpen = q.status === 'OPEN';
-        const isPaused = q.status === 'PAUSED';
-        const statusBadgeClass = isOpen ? 'badge-open' : (isPaused ? 'badge-paused' : 'badge-closed');
-        const medianMins = Math.round(q.avgServiceSeconds / 60);
-        const estTotalWaitMins = Math.ceil((q.waitingCount * q.avgServiceSeconds) / 60);
-
-        return `
-          <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
-            <div>
-              <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
-                <span class="badge ${statusBadgeClass}">● ${q.status}</span>
-                <span style="font-size: 0.75rem; color: var(--text-muted);">${q.location?.building || ''}</span>
-              </div>
-
-              <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 0.25rem; color: var(--secondary);">
-                ${q.name}
-              </h3>
-              <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
-                📍 ${q.location?.name || 'Campus Location'}
-              </p>
-
-              <div style="background: #f8fafc; border-radius: var(--radius-md); padding: 0.75rem; margin-bottom: 1.25rem;">
-                <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.35rem;">
-                  <span style="color: var(--text-muted);">Students Waiting:</span>
-                  <strong style="color: var(--primary);">${q.waitingCount} / ${q.maxSize}</strong>
-                </div>
-                <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.35rem;">
-                  <span style="color: var(--text-muted);">Median Service:</span>
-                  <span>~${medianMins} mins/student</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
-                  <span style="color: var(--text-muted);">Estimated Line ETA:</span>
-                  <strong style="color: #065f46;">${estTotalWaitMins > 0 ? '~' + estTotalWaitMins + ' mins' : '< 1 min'}</strong>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <button 
-                onclick="handleJoinQueue('${q.id}')" 
-                class="btn ${isOpen ? 'btn-primary' : 'btn-secondary'} btn-block"
-                ${!isOpen ? 'disabled' : ''}
-              >
-                ${isOpen ? 'Join Queue' : (isPaused ? 'Queue Paused' : 'Counter Closed')}
-              </button>
-            </div>
-          </div>
-        `;
-      }).join('');
-    }
-
-    async function handleJoinQueue(queueId) {
-      const user = getUser();
-      if (!user) {
-        showToast('Please sign in to join this queue', 'info');
-        setTimeout(() => window.location.href = '/login.html', 800);
-        return;
-      }
-
-      try {
-        const res = await apiFetch(`/queues/${queueId}/join`, {
-          method: 'POST',
-        });
-
-        showToast(`Ticket #${res.data.ticketNo} generated!`, 'success');
-        localStorage.setItem('queuebee_active_queue', queueId);
-
-        setTimeout(() => {
-          window.location.href = `/my-queue.html?queueId=${queueId}`;
-        }, 500);
-      } catch (err) {
-        showToast(err.message, 'error');
-        // If already in queue, offer to open it
-        if (err.data?.existingTicket || err.message.includes('already have an active ticket')) {
-          localStorage.setItem('queuebee_active_queue', queueId);
-          setTimeout(() => {
-            window.location.href = `/my-queue.html?queueId=${queueId}`;
-          }, 1200);
-        }
-      }
-    }
-
-    async function checkActiveTicket() {
-      const storedQueueId = localStorage.getItem('queuebee_active_queue');
-      if (!storedQueueId) return;
-
-      try {
-        const res = await apiFetch(`/queues/${storedQueueId}/my-position`);
-        if (res.data && (res.data.status === 'WAITING' || res.data.status === 'CALLED')) {
-          const banner = document.getElementById('active-ticket-banner');
-          const link = document.getElementById('active-ticket-link');
-          link.href = `/my-queue.html?queueId=${storedQueueId}`;
-          link.innerHTML = `🎫 View Active Ticket #${res.data.ticketNo} (${res.data.queueName})`;
-          banner.style.display = 'block';
-        }
-      } catch {
-        // No active ticket found
-      }
-    }
-
-    // Initial load
-    loadQueues();
-  </script>
+  <script src="/js/student.js"></script>
 </body>
 </html>

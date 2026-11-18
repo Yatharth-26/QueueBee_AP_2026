@@ -1,63 +1,37 @@
-// Express Application Setup & Middleware Orchestration
-// Course: Advanced Programming (AP) · B.Tech 2nd Year
-// Smart Queue (QueueBee)
+// Creates the Express app, adds middleware and connects the routes.
+// (server.js starts it. Keeping them separate makes the app easier to test.)
+const path = require("path");
+const express = require("express");
 
-const express = require('express');
-const path = require('path');
-const helmet = require('helmet');
-const cors = require('cors');
-const morgan = require('morgan');
-
-const env = require('./config/env');
-const apiRoutes = require('./routes');
-const { apiLimiter } = require('./middleware/rate-limit.middleware');
-const { errorHandler, notFoundHandler } = require('./middleware/error.middleware');
+const authRoutes = require("./routes/authRoutes");
+const locationRoutes = require("./routes/locationRoutes");
+const queueRoutes = require("./routes/queueRoutes");
+const adminRoutes = require("./routes/adminRoutes");
+const { notFound, errorHandler } = require("./middleware/errorHandler");
 
 const app = express();
 
-// Security Headers (Helmet)
-// Note: Configured with loose Content-Security-Policy to allow vanilla frontend scripts & CDN KaTeX/charts if used
-app.use(
-  helmet({
-    contentSecurityPolicy: false,
-    crossOriginEmbedderPolicy: false,
-  })
-);
-
-// Cross-Origin Resource Sharing
-app.use(cors());
-
-// HTTP Request Logger
-if (env.NODE_ENV !== 'test') {
-  app.use(morgan(env.NODE_ENV === 'development' ? 'dev' : 'combined'));
-}
-
-// Body Parsing Middleware
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true, limit: '1mb' }));
-
-// Static Frontend Serving (Vanilla HTML, CSS, JS)
-app.use(express.static(path.join(__dirname, '../public')));
-
-// Rate Limiter for API endpoints
-app.use('/api', apiLimiter);
-
-// Mount API Routes
-app.use('/api', apiRoutes);
-
-// Catch unmatched /api routes
-app.use('/api/*', notFoundHandler);
-
-// Fallback to index.html for root or SPA route navigation
-app.get('*', (req, res, next) => {
-  if (req.accepts('html')) {
-    res.sendFile(path.join(__dirname, '../public/index.html'));
-  } else {
-    next();
-  }
+// Middleware = a function that runs on every request before the route handler.
+// 1) Our own tiny logger: prints the method and URL of each request.
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.url}`);
+  next(); // pass control to the next middleware
 });
 
-// Centralized Error Handling Middleware
+// 2) Built-in middleware: reads JSON from the request body into req.body
+app.use(express.json());
+
+// 3) Built-in middleware: serves the frontend files (HTML, CSS, JS) from /public
+app.use(express.static(path.join(__dirname, "..", "public")));
+
+// API routes (each file handles one part of the API)
+app.use("/api/auth", authRoutes);
+app.use("/api/locations", locationRoutes);
+app.use("/api/queue", queueRoutes);
+app.use("/api/admin", adminRoutes);
+
+// These two MUST be last: unknown URL -> 404, any thrown error -> error handler
+app.use(notFound);
 app.use(errorHandler);
 
 module.exports = app;
