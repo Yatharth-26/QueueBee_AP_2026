@@ -1,0 +1,33 @@
+-- PostgreSQL 16.15, practice data: 5 locations, 2,000 users, 100,000 tickets (200 WAITING).
+-- Measured in the Claude sandbox - your numbers will differ, the plan shapes should be similar.
+-- FIFO waiting tickets of one location - WITH index (locationId, status) [as in schema.prisma]
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT t."ticketNumber", u."name", t."createdAt"
+FROM "QueueTicket" t JOIN "User" u ON u."id" = t."userId"
+WHERE t."locationId" = 1 AND t."status" = 'WAITING'
+ORDER BY t."ticketNumber" ASC;
+
+                                                                             QUERY PLAN                                                                              
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=151.80..151.91 rows=45 width=24) (actual time=0.932..0.937 rows=40 loops=1)
+   Sort Key: t."ticketNumber"
+   Sort Method: quicksort  Memory: 27kB
+   Buffers: shared hit=28
+   ->  Hash Join  (cost=66.29..150.56 rows=45 width=24) (actual time=0.867..0.888 rows=40 loops=1)
+         Hash Cond: (t."userId" = u.id)
+         Buffers: shared hit=25
+         ->  Index Scan using "QueueTicket_locationId_status_idx" on "QueueTicket" t  (cost=0.29..84.44 rows=45 width=16) (actual time=0.019..0.029 rows=40 loops=1)
+               Index Cond: (("locationId" = 1) AND (status = 'WAITING'::"TicketStatus"))
+               Buffers: shared hit=4
+         ->  Hash  (cost=41.00..41.00 rows=2000 width=16) (actual time=0.825..0.826 rows=2000 loops=1)
+               Buckets: 2048  Batches: 1  Memory Usage: 114kB
+               Buffers: shared hit=21
+               ->  Seq Scan on "User" u  (cost=0.00..41.00 rows=2000 width=16) (actual time=0.008..0.345 rows=2000 loops=1)
+                     Buffers: shared hit=21
+ Planning:
+   Buffers: shared hit=209
+ Planning Time: 0.847 ms
+ Execution Time: 1.022 ms
+(19 rows)
+

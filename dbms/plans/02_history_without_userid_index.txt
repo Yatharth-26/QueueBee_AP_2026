@@ -1,0 +1,36 @@
+-- PostgreSQL 16.15, practice data: 5 locations, 2,000 users, 100,000 tickets (200 WAITING).
+-- Measured in the Claude sandbox - your numbers will differ, the plan shapes should be similar.
+-- Student ticket history - WITHOUT a userId index [as in schema.prisma today]
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT t."ticketNumber", l."name", t."status", t."createdAt"
+FROM "QueueTicket" t JOIN "Location" l ON l."id" = t."locationId"
+WHERE t."userId" = 42
+ORDER BY t."createdAt" DESC LIMIT 5 OFFSET 0;
+
+                                                           QUERY PLAN                                                            
+---------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=1991.14..1991.16 rows=5 width=27) (actual time=5.877..5.880 rows=5 loops=1)
+   Buffers: shared hit=740
+   ->  Sort  (cost=1991.14..1991.27 rows=50 width=27) (actual time=5.875..5.877 rows=5 loops=1)
+         Sort Key: t."createdAt" DESC
+         Sort Method: top-N heapsort  Memory: 25kB
+         Buffers: shared hit=740
+         ->  Nested Loop  (cost=0.00..1990.31 rows=50 width=27) (actual time=0.016..5.837 rows=50 loops=1)
+               Join Filter: (t."locationId" = l.id)
+               Rows Removed by Join Filter: 100
+               Buffers: shared hit=737
+               ->  Seq Scan on "QueueTicket" t  (cost=0.00..1986.00 rows=50 width=20) (actual time=0.008..5.782 rows=50 loops=1)
+                     Filter: ("userId" = 42)
+                     Rows Removed by Filter: 99950
+                     Buffers: shared hit=736
+               ->  Materialize  (cost=0.00..1.07 rows=5 width=15) (actual time=0.000..0.000 rows=3 loops=50)
+                     Buffers: shared hit=1
+                     ->  Seq Scan on "Location" l  (cost=0.00..1.05 rows=5 width=15) (actual time=0.002..0.004 rows=5 loops=1)
+                           Buffers: shared hit=1
+ Planning:
+   Buffers: shared hit=288
+ Planning Time: 0.615 ms
+ Execution Time: 5.921 ms
+(22 rows)
+

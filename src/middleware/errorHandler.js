@@ -24,6 +24,10 @@ function errorHandler(err, req, res, next) {
     // record to update/delete was not found
     return res.status(404).json({ message: "Record not found" });
   }
+  if (err.code === "P2003") {
+    // foreign key constraint failed
+    return res.status(400).json({ message: "Referenced record does not exist" });
+  }
 
   // Anything else is our fault, so 500 Internal Server Error
   res.status(500).json({ message: "Something went wrong on the server" });

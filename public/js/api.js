@@ -86,12 +86,14 @@ async function apiRequest(path, method = "GET", body = null) {
 // Shows a message in <div id="message">. type = "error" | "success" | "info"
 function showMessage(text, type = "error") {
   const box = document.getElementById("message");
+  if (!box) return;
   box.textContent = text;
   box.className = "alert alert-" + type;
 }
 
 function hideMessage() {
   const box = document.getElementById("message");
+  if (!box) return;
   box.className = "hidden";
 }
 

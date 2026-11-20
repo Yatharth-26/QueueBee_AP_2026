@@ -1,0 +1,39 @@
+-- PostgreSQL 16.15, practice data: 5 locations, 2,000 users, 100,000 tickets (200 WAITING).
+-- Measured in the Claude sandbox - your numbers will differ, the plan shapes should be similar.
+-- FIFO waiting tickets of one location - index (locationId, status) DROPPED (only the unique (locationId, ticketNumber) index left)
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT t."ticketNumber", u."name", t."createdAt"
+FROM "QueueTicket" t JOIN "User" u ON u."id" = t."userId"
+WHERE t."locationId" = 1 AND t."status" = 'WAITING'
+ORDER BY t."ticketNumber" ASC;
+
+                                                                               QUERY PLAN                                                                               
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=1469.68..1469.79 rows=45 width=24) (actual time=2.516..2.521 rows=40 loops=1)
+   Sort Key: t."ticketNumber"
+   Sort Method: quicksort  Memory: 27kB
+   Buffers: shared hit=228
+   ->  Hash Join  (cost=434.98..1468.44 rows=45 width=24) (actual time=2.472..2.487 rows=40 loops=1)
+         Hash Cond: (t."userId" = u.id)
+         Buffers: shared hit=225
+         ->  Bitmap Heap Scan on "QueueTicket" t  (cost=368.98..1402.32 rows=45 width=16) (actual time=1.953..1.957 rows=40 loops=1)
+               Recheck Cond: ("locationId" = 1)
+               Filter: (status = 'WAITING'::"TicketStatus")
+               Rows Removed by Filter: 19960
+               Heap Blocks: exact=148
+               Buffers: shared hit=204
+               ->  Bitmap Index Scan on "QueueTicket_locationId_ticketNumber_key"  (cost=0.00..368.97 rows=19823 width=0) (actual time=0.513..0.514 rows=20000 loops=1)
+                     Index Cond: ("locationId" = 1)
+                     Buffers: shared hit=56
+         ->  Hash  (cost=41.00..41.00 rows=2000 width=16) (actual time=0.501..0.502 rows=2000 loops=1)
+               Buckets: 2048  Batches: 1  Memory Usage: 114kB
+               Buffers: shared hit=21
+               ->  Seq Scan on "User" u  (cost=0.00..41.00 rows=2000 width=16) (actual time=0.004..0.177 rows=2000 loops=1)
+                     Buffers: shared hit=21
+ Planning:
+   Buffers: shared hit=186
+ Planning Time: 0.509 ms
+ Execution Time: 2.582 ms
+(25 rows)
+
