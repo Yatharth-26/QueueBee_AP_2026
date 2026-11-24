@@ -1,5 +1,4 @@
--- PostgreSQL 16.15, practice data: 5 locations, 2,000 users, 100,000 tickets (200 WAITING).
--- Measured in the Claude sandbox - your numbers will differ, the plan shapes should be similar.
+-- PostgreSQL 16.16 (Homebrew), practice data: 5 locations, 2,000 users, 100,000 tickets (200 WAITING).
 -- Position count (people ahead) - WITH index (locationId, status)
 
 EXPLAIN (ANALYZE, BUFFERS)
@@ -8,16 +7,16 @@ WHERE "locationId" = 1 AND "status" = 'WAITING' AND "ticketNumber" < 19990;
 
                                                                          QUERY PLAN                                                                         
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=84.67..84.68 rows=1 width=8) (actual time=0.024..0.025 rows=1 loops=1)
-   Buffers: shared hit=4
-   ->  Index Scan using "QueueTicket_locationId_status_idx" on "QueueTicket"  (cost=0.29..84.56 rows=45 width=0) (actual time=0.015..0.020 rows=29 loops=1)
+ Aggregate  (cost=72.22..72.23 rows=1 width=8) (actual time=0.016..0.016 rows=1 loops=1)
+   Buffers: shared hit=1 read=2
+   ->  Index Scan using "QueueTicket_locationId_status_idx" on "QueueTicket"  (cost=0.29..72.13 rows=37 width=0) (actual time=0.010..0.012 rows=29 loops=1)
          Index Cond: (("locationId" = 1) AND (status = 'WAITING'::"TicketStatus"))
          Filter: ("ticketNumber" < 19990)
          Rows Removed by Filter: 11
-         Buffers: shared hit=4
+         Buffers: shared hit=1 read=2
  Planning:
-   Buffers: shared hit=111
- Planning Time: 0.322 ms
- Execution Time: 0.073 ms
+   Buffers: shared hit=107
+ Planning Time: 0.198 ms
+ Execution Time: 0.033 ms
 (11 rows)
 

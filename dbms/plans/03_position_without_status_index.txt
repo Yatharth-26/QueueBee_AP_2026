@@ -1,5 +1,4 @@
--- PostgreSQL 16.15, practice data: 5 locations, 2,000 users, 100,000 tickets (200 WAITING).
--- Measured in the Claude sandbox - your numbers will differ, the plan shapes should be similar.
+-- PostgreSQL 16.16 (Homebrew), practice data: 5 locations, 2,000 users, 100,000 tickets (200 WAITING).
 -- Position count (people ahead) - index (locationId, status) DROPPED
 
 EXPLAIN (ANALYZE, BUFFERS)
@@ -8,20 +7,20 @@ WHERE "locationId" = 1 AND "status" = 'WAITING' AND "ticketNumber" < 19990;
 
                                                                             QUERY PLAN                                                                            
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=1501.25..1501.26 rows=1 width=8) (actual time=1.727..1.728 rows=1 loops=1)
-   Buffers: shared hit=203
-   ->  Bitmap Heap Scan on "QueueTicket"  (cost=418.42..1501.13 rows=45 width=0) (actual time=1.718..1.721 rows=29 loops=1)
+ Aggregate  (cost=1693.60..1693.61 rows=1 width=8) (actual time=1.059..1.060 rows=1 loops=1)
+   Buffers: shared hit=241
+   ->  Bitmap Heap Scan on "QueueTicket"  (cost=424.73..1693.46 rows=55 width=0) (actual time=1.054..1.056 rows=29 loops=1)
          Recheck Cond: (("locationId" = 1) AND ("ticketNumber" < 19990))
          Filter: (status = 'WAITING'::"TicketStatus")
          Rows Removed by Filter: 19960
-         Heap Blocks: exact=147
-         Buffers: shared hit=203
-         ->  Bitmap Index Scan on "QueueTicket_locationId_ticketNumber_key"  (cost=0.00..418.41 rows=19812 width=0) (actual time=0.609..0.609 rows=19989 loops=1)
+         Heap Blocks: exact=185
+         Buffers: shared hit=241
+         ->  Bitmap Index Scan on "QueueTicket_locationId_ticketNumber_key"  (cost=0.00..424.71 rows=20042 width=0) (actual time=0.356..0.356 rows=19991 loops=1)
                Index Cond: (("locationId" = 1) AND ("ticketNumber" < 19990))
                Buffers: shared hit=56
  Planning:
-   Buffers: shared hit=91
- Planning Time: 0.354 ms
- Execution Time: 1.782 ms
+   Buffers: shared hit=87
+ Planning Time: 0.171 ms
+ Execution Time: 1.076 ms
 (15 rows)
 

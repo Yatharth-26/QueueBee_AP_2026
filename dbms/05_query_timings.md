@@ -2,162 +2,251 @@
 
 **Course:** Advanced Programming (AP) · **Year:** B.Tech 2nd Year · **Team No.:** T0083 · **Section:** D
 
+---
+
 ## 1. What is `EXPLAIN ANALYZE`?
 
-- `EXPLAIN` shows the **plan** PostgreSQL chooses to run a query (which tables it reads and how).
-- `EXPLAIN ANALYZE` also **runs** the query and adds the **real time** and the **real number of rows**.
-- `BUFFERS` adds how many 8 KB data pages were read (`shared hit` = found in memory). Fewer pages = less work.
+- `EXPLAIN` displays the **execution plan** PostgreSQL generates for a query (how tables are accessed, join strategies, and scan methods).
+- `EXPLAIN ANALYZE` actually **executes** the query, measuring real wall-clock execution time and actual row counts.
+- `BUFFERS` adds buffer cache activity: how many 8 KB memory pages were hit (`shared hit`) or read from disk (`read`). Fewer pages processed indicates higher efficiency.
 
-Words you will see in a plan:
+Common plan operations:
 
 | Term | Meaning |
 |---|---|
-| **Seq Scan** | Reads the **whole table** row by row |
-| **Index Scan** | Uses an index to jump straight to matching rows |
-| **Bitmap Index/Heap Scan** | Uses an index to collect row locations, then reads those pages |
-| **Sort** | Sorts rows (needed for `ORDER BY` when the index gives no order) |
-| **Execution Time** | Real time to run the query |
+| **Seq Scan** | Scans the **entire table** sequentially row by row |
+| **Index Scan** | Traverses an index directly to locate matching rows |
+| **Bitmap Index / Heap Scan** | Builds a bitmap of matching pages using an index, then retrieves those heap pages |
+| **Sort** | Sorts result tuples in memory (e.g. `ORDER BY` when the index cannot supply the requested order) |
+| **Hash Join / Nested Loop** | Algorithms used to combine rows from multiple joined tables |
+| **Execution Time** | Actual time spent running the query (excluding parse/plan overhead) |
+
+---
 
 ## 2. Indexes in QueueBee
 
-| Index | Where it comes from | Helps |
+| Index | Definition & Origin | Purpose & Optimizations |
 |---|---|---|
-| `(locationId, status)` | `@@index([locationId, status])` in `schema.prisma` | "Waiting tickets of a location", "count waiting per location", position calculation |
-| `(locationId, ticketNumber)` | `@@unique([locationId, ticketNumber])` — a UNIQUE constraint also creates an index | Stops duplicate ticket numbers; finding the highest number of a location (next ticket number) |
-| `(userId)` | **Not in `schema.prisma` today.** Optional, shown as a comment at the end of `03_schema.sql` | "Ticket history of one student" |
-| `email` (unique) and `name` (unique) | `@unique` | Login by email, location lookup by name |
+| `(locationId, status)` | `CREATE INDEX "QueueTicket_locationId_status_idx"` (from `@@index([locationId, status])` in Prisma) | Rapidly filters waiting tickets by location for staff queues (Q4), position counting (Q6), and queue summaries (Q7, Q14). |
+| `(locationId, ticketNumber)` | `CREATE UNIQUE INDEX "QueueTicket_locationId_ticketNumber_key"` (from `@@unique([locationId, ticketNumber])` in Prisma) | Enforces running sequence integrity; powers next-ticket calculations (`MAX(ticketNumber) + 1` in Q3). |
+| `(userId)` | `CREATE INDEX "QueueTicket_userId_idx"` (*Optional benchmark index*, commented in `03_schema.sql`) | Eliminates table scans for student ticket history (Q5) and student cancellations (Q10). |
+| `email` & `name` | `CREATE UNIQUE INDEX` on `User(email)` and `Location(name)` | Provides fast $O(\log N)$ unique lookups for authentication, foreign key resolution, and filtering. |
 
-> Honest note: PostgreSQL does **not** create an index on a foreign key column automatically.
-> That is why `userId` has no index at the moment. Section 5 shows what it would change.
+> **Note on Foreign Key Indexes:** PostgreSQL does not automatically create indexes on foreign key columns. While `locationId` is indexed via compound indexes, `userId` is unindexed by default. Benchmarks below demonstrate the dramatic performance improvement when indexing foreign keys.
 
-## 3. How these numbers were collected
+---
 
-The numbers below are **real measurements**, not invented. They were taken once, on a small cloud sandbox with **PostgreSQL 16.15**, on generated practice data:
+## 3. Benchmark Environment & Methodology
 
-- 5 locations, 2,000 users, **100,000 tickets** (200 of them `WAITING`, the rest `COMPLETED` or `CANCELLED`)
-- Each query was run 3 times; the last run (data in memory) is reported.
-- Your computer will give **different times**. What matters is the **plan** (Seq Scan vs Index Scan) and the **pages read**, which should look similar.
-- The full plans are in the `plans/` folder.
+All timings reported in this document are **genuine measurements** executed against an active PostgreSQL instance:
 
-You can repeat everything yourself — see section 6.
+- **Database Engine:** PostgreSQL 16.16 (Homebrew)
+- **Host System:** macOS (Apple Silicon aarch64, Darwin 27.2.0)
+- **Dataset Size:**
+  - **5 Locations:** Canteen, Library Desk, Fee Office, Admin Center, IT Helpdesk
+  - **2,000 Users:** Students, Staff, and Administrators
+  - **100,000 Queue Tickets:** 20,000 tickets per location (200 active `WAITING` tickets, 40 per location; 1 `CALLED` ticket in Canteen; remaining tickets distributed between `COMPLETED` and `CANCELLED`)
+- **Measurement Protocol:**
+  - Every query from CP3 (`04_queries.sql`, Q1 through Q16) was executed **three separate times** (`Run 1`, `Run 2`, `Run 3`).
+  - Execution times were extracted directly from the PostgreSQL engine via `EXPLAIN (ANALYZE, BUFFERS)`.
+  - The arithmetic mean was computed as `Average (ms)` rounded to three decimal places.
+- **Safety Protocol for WRITE Queries:**
+  - In accordance with review guidelines, write queries (`INSERT`, `UPDATE`) were executed inside isolated database transactions (`BEGIN; ... ROLLBACK;`).
+  - This guaranteed zero data corruption, prevented duplicate key collisions, and ensured that every benchmark run began with an identical baseline state.
 
-## 4. Query 1 — FIFO list of waiting tickets of one location
+---
 
-Used by the staff screen and by "call next" (`04_queries.sql`, Q4 and Q8).
+## 4. CP3 Query Timing Measurements (Q1 – Q16)
+
+The table below reports the **Run 1**, **Run 2**, **Run 3**, and **Average (ms)** execution times for every query in `dbms/04_queries.sql`:
+
+| Query | Run 1 (ms) | Run 2 (ms) | Run 3 (ms) | Average (ms) |
+|:---|---:|---:|---:|---:|
+| Q1 (Insert users — WRITE) | 0.813 | 0.514 | 0.453 | 0.593 |
+| Q2 (Insert locations — WRITE) | 0.686 | 0.238 | 0.337 | 0.420 |
+| Q3 (Create queue ticket with JOIN — WRITE) | 6.960 | 6.736 | 7.415 | 7.037 |
+| Q4 (FIFO waiting list of location — READ) | 0.147 | 0.125 | 0.148 | 0.140 |
+| Q5 (Student ticket history pagination — READ) | 14.542 | 10.687 | 7.668 | 10.966 |
+| Q6 (Position & wait calculation with JOIN — READ) | 0.128 | 0.224 | 0.213 | 0.188 |
+| Q7 (Waiting count per location — READ) | 0.219 | 0.192 | 0.185 | 0.199 |
+| Q8 (Staff call next waiting ticket — WRITE) | 0.550 | 0.292 | 0.674 | 0.505 |
+| Q9 (Staff complete called ticket with JOIN — WRITE) | 0.300 | 0.308 | 0.306 | 0.305 |
+| Q10 (Student cancel ticket with JOIN — WRITE) | 0.543 | 1.107 | 0.490 | 0.713 |
+| Q11 (Total users by role — READ) | 0.806 | 0.470 | 0.448 | 0.575 |
+| Q12 (Tickets by status aggregation — READ) | 18.038 | 14.314 | 10.984 | 14.445 |
+| Q13 (Busiest locations with LEFT JOIN — READ) | 18.121 | 16.847 | 16.682 | 17.217 |
+| Q14 (Per-location summary CTE with LEFT JOIN — READ) | 6.159 | 5.145 | 5.376 | 5.560 |
+| Q15 (Average waiting time aggregation — READ) | 23.820 | 22.022 | 21.750 | 22.531 |
+| Q16 (Students without tickets anti-join — READ) | 9.033 | 9.008 | 8.973 | 9.005 |
+
+---
+
+## 5. Detailed Index Analysis: Query 1 (Q4) — FIFO Waiting Queue
+
+Used by the staff queue screen to display all active students waiting for service in order of arrival (`04_queries.sql`, Q4):
 
 ```sql
 SELECT t."ticketNumber", u."name", t."createdAt"
-FROM "QueueTicket" t JOIN "User" u ON u."id" = t."userId"
+FROM "QueueTicket" t
+JOIN "User" u ON u."id" = t."userId"
 WHERE t."locationId" = 1 AND t."status" = 'WAITING'
 ORDER BY t."ticketNumber" ASC;
 ```
 
-| | With `(locationId, status)` index | Without it (only the unique `(locationId, ticketNumber)` index left) |
+### Performance & Buffer Comparison
+
+| Metric | With `(locationId, status)` Index | Without `(locationId, status)` Index |
 |---|---|---|
-| How tickets are found | **Index Scan** on `QueueTicket_locationId_status_idx` | **Bitmap Index Scan** on `(locationId, ticketNumber)` then filter `status` |
-| Rows read from the table that are thrown away | 0 | 19,960 |
-| Pages read (`shared hit`) | 28 | 228 |
-| Execution time | **1.022 ms** | **2.582 ms** |
-| Plan file | `plans/01_fifo_with_status_index.txt` | `plans/01_fifo_without_status_index.txt` |
+| **Scan Strategy** | **Index Scan** on `QueueTicket_locationId_status_idx` | **Bitmap Heap Scan** via `(locationId, ticketNumber)` |
+| **Rows Removed by Filter** | **0** | **19,960** rows read and discarded |
+| **Buffers Read (`shared hit`)** | **27 blocks** (~216 KB) | **267 blocks** (~2,136 KB) |
+| **Run 1** | 0.293 ms | 1.208 ms |
+| **Run 2** | 0.229 ms | 1.247 ms |
+| **Run 3** | 0.229 ms | 1.302 ms |
+| **Average (ms)** | **0.250 ms** | **1.252 ms** |
+| **Execution Plan File** | [`plans/01_fifo_with_status_index.txt`](file:///Users/yatharth/Downloads/QueueBee%202/dbms/plans/01_fifo_with_status_index.txt) | [`plans/01_fifo_without_status_index.txt`](file:///Users/yatharth/Downloads/QueueBee%202/dbms/plans/01_fifo_without_status_index.txt) |
 
-**Explanation.** With the `(locationId, status)` index PostgreSQL goes directly to the 40 waiting tickets of location 1.
-Without it, the unique `(locationId, ticketNumber)` index still helps a little (it finds the 20,000 tickets of location 1 instead of all 100,000) but PostgreSQL must then read them all and throw away the finished ones.
-The query still has a small **Sort** step for `ORDER BY ticketNumber`: the `(locationId, status)` index finds the right rows but does not store them in ticket-number order. With only 40 waiting rows this sort is very cheap.
+**Analysis:**
+With the compound `(locationId, status)` index, PostgreSQL navigates directly to the 40 active waiting records for location 1. Without it, the query planner must rely on the `(locationId, ticketNumber)` index, scanning all 20,000 records for the location and discarding 19,960 completed/cancelled tickets. The dedicated index yields a **5.0× speedup** and reduces buffer memory reads by **90%**.
 
-## 5. Query 2 — Ticket history of one student
+---
 
-Used by the student history table (`04_queries.sql`, Q5).
+## 6. Detailed Index Analysis: Query 2 (Q5) — Student Ticket History
+
+Used on the student portal to show their previous tickets, paginated newest first (`04_queries.sql`, Q5):
 
 ```sql
 SELECT t."ticketNumber", l."name", t."status", t."createdAt"
-FROM "QueueTicket" t JOIN "Location" l ON l."id" = t."locationId"
-WHERE t."userId" = 42
-ORDER BY t."createdAt" DESC LIMIT 5 OFFSET 0;
+FROM "QueueTicket" t
+JOIN "Location" l ON l."id" = t."locationId"
+WHERE t."userId" = 1
+ORDER BY t."createdAt" DESC
+LIMIT 5 OFFSET 0;
 ```
 
-| | As shipped (no `userId` index) | With optional index `(userId)` |
+### Performance & Buffer Comparison
+
+| Metric | Without `userId` Index (As Shipped) | With Optional `(userId)` Index |
 |---|---|---|
-| How tickets are found | **Seq Scan** of the whole table | **Bitmap Index Scan** on `QueueTicket_userId_idx` |
-| Rows read and thrown away | 99,950 | 0 |
-| Pages read (`shared hit`) | 740 | 56 |
-| Execution time | **5.921 ms** | **0.379 ms** |
-| Plan file | `plans/02_history_without_userid_index.txt` | `plans/02_history_with_userid_index.txt` |
+| **Scan Strategy** | **Seq Scan** across entire table | **Bitmap Index Scan** on `QueueTicket_userId_idx` |
+| **Rows Removed by Filter** | **99,945** rows scanned and discarded | **0** rows discarded |
+| **Buffers Read (`shared hit`)** | **922 blocks** (~7.37 MB) | **59 blocks** (~472 KB) |
+| **Run 1** | 3.665 ms | 0.128 ms |
+| **Run 2** | 3.564 ms | 0.117 ms |
+| **Run 3** | 3.650 ms | 0.124 ms |
+| **Average (ms)** | **3.626 ms** | **0.123 ms** |
+| **Execution Plan File** | [`plans/02_history_without_userid_index.txt`](file:///Users/yatharth/Downloads/QueueBee%202/dbms/plans/02_history_without_userid_index.txt) | [`plans/02_history_with_userid_index.txt`](file:///Users/yatharth/Downloads/QueueBee%202/dbms/plans/02_history_with_userid_index.txt) |
 
-**Explanation.** No index starts with `userId`, so PostgreSQL has to read every ticket to find the 50 tickets of this student.
-An index on `userId` jumps directly to them. This is the one place where the current schema could be improved: add `@@index([userId])` to the `QueueTicket` model in `schema.prisma` and run `npx prisma migrate dev`.
-For a campus project with a few thousand tickets the difference is tiny, but the table grows every day.
+**Analysis:**
+Because foreign keys are not automatically indexed by PostgreSQL, queries filtering by `userId` must perform a sequential scan across all 100,000 tickets. Adding `CREATE INDEX "QueueTicket_userId_idx" ON "QueueTicket"("userId")` reduces execution time from **3.626 ms to 0.123 ms** (a **29.5× speedup**) and cuts memory page reads by **93.6%**. Adding `@@index([userId])` to `schema.prisma` is strongly recommended for production scaling.
 
-## 6. Query 3 — Position in the queue (people ahead)
+---
 
-Used to show the student's position (`04_queries.sql`, Q6 and `addPositionInfo` in `queueController.js`).
+## 7. Detailed Index Analysis: Query 3 (Q6 Core) — Queue Position Count
+
+Used on the live queue status widget to compute how many people are ahead of a student (`04_queries.sql`, Q6):
 
 ```sql
-SELECT COUNT(*) + 1 FROM "QueueTicket"
-WHERE "locationId" = 1 AND "status" = 'WAITING' AND "ticketNumber" < 19990;
+SELECT COUNT(*) + 1
+FROM "QueueTicket"
+WHERE "locationId" = 1
+  AND "status" = 'WAITING'
+  AND "ticketNumber" < 19990;
 ```
 
-| | With `(locationId, status)` | Without it |
+### Performance & Buffer Comparison
+
+| Metric | With `(locationId, status)` Index | Without `(locationId, status)` Index |
 |---|---|---|
-| Plan | Index Scan | Bitmap Index Scan on `(locationId, ticketNumber)` + filter |
-| Pages read | 4 | 203 |
-| Execution time | **0.073 ms** | **1.782 ms** |
-| Plan file | `plans/03_position_with_status_index.txt` | `plans/03_position_without_status_index.txt` |
+| **Scan Strategy** | **Index Scan** on `QueueTicket_locationId_status_idx` | **Bitmap Heap Scan** via `(locationId, ticketNumber)` |
+| **Rows Removed by Filter** | **11** | **19,960** |
+| **Buffers Read (`shared hit`)** | **3 blocks** (~24 KB) | **241 blocks** (~1.92 MB) |
+| **Run 1** | 0.036 ms | 1.041 ms |
+| **Run 2** | 0.033 ms | 1.093 ms |
+| **Run 3** | 0.030 ms | 1.196 ms |
+| **Average (ms)** | **0.033 ms** | **1.110 ms** |
+| **Execution Plan File** | [`plans/03_position_with_status_index.txt`](file:///Users/yatharth/Downloads/QueueBee%202/dbms/plans/03_position_with_status_index.txt) | [`plans/03_position_without_status_index.txt`](file:///Users/yatharth/Downloads/QueueBee%202/dbms/plans/03_position_without_status_index.txt) |
 
-This query runs every time a student page refreshes (every 5 seconds), so keeping it cheap is useful.
+**Analysis:**
+Because the student dashboard polls position every 5 seconds, this query is executed frequently. With the index, PostgreSQL resolves the count in **0.033 ms** touching just 3 buffer pages. Without it, the database inspects 20,000 records taking **1.110 ms** (**33.6× slower**).
 
-## 7. Summary
+---
 
-| Query | Best index | Result in our test |
-|---|---|---|
-| FIFO waiting list | `(locationId, status)` | about 2.5× faster, 8× fewer pages |
-| Position / people ahead | `(locationId, status)` | about 24× faster |
-| Student history | `(userId)` — optional, not yet in schema | about 15× faster |
-| Next ticket number | `(locationId, ticketNumber)` | already covered by the UNIQUE constraint |
+## 8. Summary of Index Impact
 
-**Cost of indexes:** every index uses disk space and makes `INSERT`/`UPDATE` slightly slower, so we only keep indexes that match real queries.
+| Workload Area | Critical Index | Benchmark Impact | Engineering Conclusion |
+|---|---|---|---|
+| **Staff Queue (FIFO)** | `(locationId, status)` | **5.0× faster** (0.250 ms vs 1.252 ms); 90% fewer buffer reads | Essential: Keeps queue screen instant under heavy load. |
+| **Student History** | `(userId)` | **29.5× faster** (0.123 ms vs 3.626 ms); avoids 100k-row Seq Scan | Highly Recommended: Foreign key index should be added to schema. |
+| **Position & Wait Time** | `(locationId, status)` | **33.6× faster** (0.033 ms vs 1.110 ms); 3 pages vs 241 pages | Vital: Protects server CPU under frequent 5-second polling. |
+| **Sequence Integrity** | `(locationId, ticketNumber)` | Unique constraint index; enables $O(1)$ lookups for `MAX + 1` | Prevents ticket race conditions and duplicates. |
 
-## 8. How to run it yourself
+---
 
-1. Create a practice database and load the schema:
+## 9. How to Reproduce These Results
+
+To reproduce these benchmarks on your local PostgreSQL instance:
+
+1. **Create and initialize the benchmark database:**
    ```bash
    createdb queuebee_practice
    psql -d queuebee_practice -f dbms/03_schema.sql
    ```
-2. Generate practice data (about 100,000 tickets):
-   ```sql
-   INSERT INTO "User"("name","email","passwordHash","role")
-   SELECT 'Student '||g, 'student'||g||'@test.edu', 'x', 'STUDENT' FROM generate_series(1,2000) g;
 
-   INSERT INTO "Location"("name","avgServiceMinutes")
-   SELECT 'Location '||g, 5 FROM generate_series(1,5) g;
-
-   INSERT INTO "QueueTicket"("ticketNumber","status","createdAt","userId","locationId")
-   SELECT n,
-          CASE WHEN n > 19960 THEN 'WAITING'::"TicketStatus"
-               WHEN n % 10 = 0 THEN 'CANCELLED'::"TicketStatus"
-               ELSE 'COMPLETED'::"TicketStatus" END,
-          now() - (20000 - n) * interval '1 minute',
-          1 + (n * 7 + l * 13) % 2000,
-          l
-   FROM generate_series(1,20000) n CROSS JOIN generate_series(1,5) l;
-
-   ANALYZE;   -- refresh the statistics the planner uses
-   ```
-3. Run a query with `EXPLAIN (ANALYZE, BUFFERS)` in front, **3 times**, and note the last result:
+2. **Generate the 100,000 ticket dataset:**
    ```sql
-   EXPLAIN (ANALYZE, BUFFERS)
-   SELECT t."ticketNumber", u."name", t."createdAt"
-   FROM "QueueTicket" t JOIN "User" u ON u."id" = t."userId"
-   WHERE t."locationId" = 1 AND t."status" = 'WAITING'
-   ORDER BY t."ticketNumber" ASC;
-   ```
-4. To compare, drop or add an index and run again:
-   ```sql
-   DROP INDEX "QueueTicket_locationId_status_idx";                       -- see the slower plan
-   CREATE INDEX "QueueTicket_locationId_status_idx" ON "QueueTicket" ("locationId","status");
-   CREATE INDEX "QueueTicket_userId_idx" ON "QueueTicket" ("userId");     -- optional index for history
+   -- Insert locations
+   INSERT INTO "Location" ("name", "description", "avgServiceMinutes") VALUES
+       ('Canteen', 'Main campus canteen', 3),
+       ('Library Desk', 'Book issue and return desk', 4),
+       ('Fee Office', 'Fee payment and receipts', 6),
+       ('Admin Center', 'Student services', 5),
+       ('IT Helpdesk', 'IT and network support', 5);
+
+   -- Insert 2,000 users
+   INSERT INTO "User" ("name", "email", "passwordHash", "role")
+   SELECT 'Student ' || g, 'student' || g || '@test.edu', 'hash_demo', 'STUDENT'
+   FROM generate_series(1, 2000) g;
+
+   -- Insert 100,000 tickets across 5 locations
+   INSERT INTO "QueueTicket" ("ticketNumber", "status", "createdAt", "calledAt", "completedAt", "userId", "locationId")
+   SELECT
+       n AS ticketNumber,
+       CASE
+           WHEN n > 19960 THEN 'WAITING'::"TicketStatus"
+           WHEN n = 19960 AND l = 1 THEN 'CALLED'::"TicketStatus"
+           WHEN n % 10 = 0 THEN 'CANCELLED'::"TicketStatus"
+           ELSE 'COMPLETED'::"TicketStatus"
+       END,
+       now() - (20000 - n) * interval '1 minute',
+       CASE WHEN n <= 19960 AND n % 10 != 0 THEN now() - (20000 - n) * interval '1 minute' + interval '4 minute' ELSE NULL END,
+       CASE WHEN n < 19960 AND n % 10 != 0 THEN now() - (20000 - n) * interval '1 minute' + interval '8 minute' ELSE NULL END,
+       1 + (n * 7 + l * 13) % 2000,
+       l
+   FROM generate_series(1, 20000) n
+   CROSS JOIN generate_series(1, 5) l;
+
    ANALYZE;
    ```
-5. Do **not** run these on your real QueueBee database — use the practice database.
 
-Tip: with only a few rows (like the seed data) PostgreSQL may choose a Seq Scan even when an index exists, because reading a tiny table is faster. That is normal and why we test with many rows.
+3. **Run queries with `EXPLAIN (ANALYZE, BUFFERS)` 3 times:**
+   - For **READ** queries:
+     ```sql
+     EXPLAIN (ANALYZE, BUFFERS)
+     SELECT t."ticketNumber", u."name", t."createdAt"
+     FROM "QueueTicket" t JOIN "User" u ON u."id" = t."userId"
+     WHERE t."locationId" = 1 AND t."status" = 'WAITING'
+     ORDER BY t."ticketNumber" ASC;
+     ```
+   - For **WRITE** queries, protect the database with transactional rollback:
+     ```sql
+     BEGIN;
+     EXPLAIN (ANALYZE, BUFFERS)
+     UPDATE "QueueTicket" t
+     SET "status" = 'COMPLETED', "completedAt" = now()
+     FROM "Location" l
+     WHERE t."locationId" = l."id"
+       AND t."status" = 'CALLED'
+       AND l."name" = 'Canteen';
+     ROLLBACK;
+     ```

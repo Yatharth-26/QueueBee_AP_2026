@@ -1,39 +1,38 @@
--- PostgreSQL 16.15, practice data: 5 locations, 2,000 users, 100,000 tickets (200 WAITING).
--- Measured in the Claude sandbox - your numbers will differ, the plan shapes should be similar.
+-- PostgreSQL 16.16 (Homebrew), practice data: 5 locations, 2,000 users, 100,000 tickets (200 WAITING).
 -- Student ticket history - WITH the optional index (userId)
 
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT t."ticketNumber", l."name", t."status", t."createdAt"
 FROM "QueueTicket" t JOIN "Location" l ON l."id" = t."locationId"
-WHERE t."userId" = 42
+WHERE t."userId" = 1
 ORDER BY t."createdAt" DESC LIMIT 5 OFFSET 0;
 
                                                                      QUERY PLAN                                                                      
 -----------------------------------------------------------------------------------------------------------------------------------------------------
- Limit  (cost=165.56..165.57 rows=5 width=27) (actual time=0.313..0.316 rows=5 loops=1)
-   Buffers: shared hit=56
-   ->  Sort  (cost=165.56..165.69 rows=50 width=27) (actual time=0.311..0.313 rows=5 loops=1)
+ Limit  (cost=169.53..169.54 rows=5 width=27) (actual time=0.120..0.121 rows=5 loops=1)
+   Buffers: shared hit=59 read=2
+   ->  Sort  (cost=169.53..169.65 rows=50 width=27) (actual time=0.120..0.120 rows=5 loops=1)
          Sort Key: t."createdAt" DESC
          Sort Method: top-N heapsort  Memory: 25kB
-         Buffers: shared hit=56
-         ->  Hash Join  (cost=5.79..164.73 rows=50 width=27) (actual time=0.064..0.275 rows=50 loops=1)
+         Buffers: shared hit=59 read=2
+         ->  Hash Join  (cost=5.79..168.70 rows=50 width=27) (actual time=0.021..0.100 rows=55 loops=1)
                Hash Cond: (t."locationId" = l.id)
-               Buffers: shared hit=53
-               ->  Bitmap Heap Scan on "QueueTicket" t  (cost=4.68..163.38 rows=50 width=20) (actual time=0.029..0.225 rows=50 loops=1)
-                     Recheck Cond: ("userId" = 42)
-                     Heap Blocks: exact=50
-                     Buffers: shared hit=52
-                     ->  Bitmap Index Scan on "QueueTicket_userId_idx"  (cost=0.00..4.67 rows=50 width=0) (actual time=0.018..0.018 rows=50 loops=1)
-                           Index Cond: ("userId" = 42)
-                           Buffers: shared hit=2
-               ->  Hash  (cost=1.05..1.05 rows=5 width=15) (actual time=0.019..0.020 rows=5 loops=1)
+               Buffers: shared hit=56 read=2
+               ->  Bitmap Heap Scan on "QueueTicket" t  (cost=4.68..167.34 rows=50 width=20) (actual time=0.012..0.085 rows=55 loops=1)
+                     Recheck Cond: ("userId" = 1)
+                     Heap Blocks: exact=55
+                     Buffers: shared hit=55 read=2
+                     ->  Bitmap Index Scan on "QueueTicket_userId_idx"  (cost=0.00..4.67 rows=50 width=0) (actual time=0.008..0.008 rows=55 loops=1)
+                           Index Cond: ("userId" = 1)
+                           Buffers: shared read=2
+               ->  Hash  (cost=1.05..1.05 rows=5 width=15) (actual time=0.006..0.006 rows=5 loops=1)
                      Buckets: 1024  Batches: 1  Memory Usage: 9kB
                      Buffers: shared hit=1
-                     ->  Seq Scan on "Location" l  (cost=0.00..1.05 rows=5 width=15) (actual time=0.007..0.008 rows=5 loops=1)
+                     ->  Seq Scan on "Location" l  (cost=0.00..1.05 rows=5 width=15) (actual time=0.002..0.002 rows=5 loops=1)
                            Buffers: shared hit=1
  Planning:
-   Buffers: shared hit=300
- Planning Time: 0.818 ms
- Execution Time: 0.379 ms
+   Buffers: shared hit=285 read=1
+ Planning Time: 0.389 ms
+ Execution Time: 0.141 ms
 (25 rows)
 
